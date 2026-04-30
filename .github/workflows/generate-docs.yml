@@ -6,7 +6,7 @@ on:
       url:
         description: 'https://plankanban.github.io/planka/'
         required: true
-        default: 'https://plankanban.github.io/planka/'
+        default: ''
 
 jobs:
   generate:
