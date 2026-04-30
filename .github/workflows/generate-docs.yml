@@ -4,24 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       url:
-        description: 'https://plankanban.github.io/planka/'
+        description: 'URL проекта (напр. https://demo.planka.cloud)'
         required: true
-        default: 'https://plankanban.github.io/planka/'
+        default: 'https://demo.planka.cloud'
 
 jobs:
   generate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      # Кэш для ускорения повторных запусков
-      - name: Cache transformers models
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/huggingface
-          key: transformers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            transformers-${{ runner.os }}-
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -29,15 +20,10 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: npm ci && npx playwright install --with-deps chromium
+        run: npm install && npx playwright install --with-deps chromium
 
       - name: Run documentation agent
         run: node scripts/capture-and-document.js "${{ github.event.inputs.url }}"
-        # Секретная переменная ниже оставлена, если вы решите подключить внешний API.
-        # Если не нужна – удалите или закомментируйте строку с env.
-        #
-        # env:
-        #   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
       - name: Upload generated docs
         uses: actions/upload-artifact@v4
