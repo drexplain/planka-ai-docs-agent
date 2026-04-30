@@ -55,8 +55,7 @@ const screenshotsDir = path.join(outputDir, 'screenshots');
   }
 
   // --- Шаг 3: Подпись от локальной модели ---
-  const imageBuffer = fs.readFileSync(mainScreenshotPath);
-  const caption = await getCaption(imageBuffer);
+  const caption = await getCaption(mainScreenshotPath);
   console.log('Описание от модели:', caption);
 
   // --- Шаг 4: Сборка Markdown ---
