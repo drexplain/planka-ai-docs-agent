@@ -4,19 +4,19 @@ const path = require('path');
 const fs = require('fs');
 const sharp = require('sharp');
 
-const url = process.argv[2] || 'https://plankanban.github.io/planka/';
+const url = process.argv[2] || 'https://demo.planka.cloud';
 const outputDir = path.join(__dirname, '..', 'output');
 const screenshotsDir = path.join(outputDir, 'screenshots');
 
-// Настройки: какие элементы считаем значимыми
+// Значимые элементы (CSS-селекторы БЕЗ псевдоклассов типа :visible)
 const SIGNIFICANT_SELECTORS = [
-  'button:visible',
-  'a:visible[href]:not([href="#"]):not([href="/"])',
-  'input:visible[type="text"], input:visible[type="email"], input:visible[type="password"], input:visible[type="search"]',
-  'textarea:visible',
-  'select:visible',
-  'h1:visible, h2:visible',
-  '.btn:visible, [role="button"]:visible',
+  'button',
+  'a[href]:not([href="#"]):not([href="/"])',
+  'input[type="text"], input[type="email"], input[type="password"], input[type="search"]',
+  'textarea',
+  'select',
+  'h1, h2',
+  '.btn, [role="button"]',
 ];
 
 (async () => {
@@ -29,109 +29,103 @@ const SIGNIFICANT_SELECTORS = [
   console.log(`Открываю ${url}...`);
   await page.goto(url, { waitUntil: 'networkidle' });
 
-  // --- Шаг 1: Скриншот главной страницы ---
+  // --- Скриншот ---
   const mainScreenshotPath = path.join(screenshotsDir, '01-main.png');
   await page.screenshot({ path: mainScreenshotPath, fullPage: false });
   console.log('Скриншот сохранён');
 
-  // --- Шаг 2: Сбор значимых элементов с координатами и текстами ---
+  // --- Сбор видимых элементов ---
   const elements = await page.evaluate((selectors) => {
     const results = [];
     const seen = new Set();
 
+    // Функция проверки видимости элемента
+    const isVisible = (el) => {
+      if (!el) return false;
+      const style = window.getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 10 || rect.height < 10) return false;
+      if (rect.bottom < 0 || rect.top > window.innerHeight || rect.right < 0 || rect.left > window.innerWidth) return false;
+      // Проверка, не перекрыт ли элемент полностью (грубо: если размер есть, считаем видимым)
+      return true;
+    };
+
     for (const selector of selectors) {
-      const nodes = document.querySelectorAll(selector);
-      for (const node of nodes) {
-        const rect = node.getBoundingClientRect();
-        // Пропускаем элементы вне видимой области или слишком маленькие
-        if (rect.width < 20 || rect.height < 15) continue;
-        if (rect.top < 0 || rect.top > window.innerHeight) continue;
-        if (rect.left < 0 || rect.left > window.innerWidth) continue;
+      try {
+        const nodes = document.querySelectorAll(selector);
+        for (const node of nodes) {
+          if (!isVisible(node)) continue;
 
-        // Уникальность по координатам (избегаем дублирования вложенных элементов)
-        const key = `${Math.round(rect.x)},${Math.round(rect.y)},${Math.round(rect.width)},${Math.round(rect.height)}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
+          const rect = node.getBoundingClientRect();
+          // Уникальность по координатам и размерам (избегаем дублирования)
+          const key = `${Math.round(rect.x)},${Math.round(rect.y)},${Math.round(rect.width)},${Math.round(rect.height)}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
 
-        // Извлекаем текст элемента
-        let text = node.innerText?.trim().substring(0, 50) || '';
-        // Если текст пустой, пробуем placeholder или aria-label
-        if (!text) {
-          text = node.getAttribute('placeholder') || node.getAttribute('aria-label') || node.getAttribute('title') || '';
-        }
-        // Для ссылок берём текст или title
-        if (!text && node.tagName === 'A') {
-          text = node.getAttribute('title') || node.href || '';
-        }
-        // Если совсем ничего, пишем тип элемента
-        if (!text) {
-          text = node.tagName.toLowerCase();
-          if (node.type) text += `[type=${node.type}]`;
-        }
+          // Извлекаем текст или плейсхолдер
+          let text = node.innerText?.trim().substring(0, 50) || '';
+          if (!text) {
+            text = node.getAttribute('placeholder') || node.getAttribute('aria-label') || node.getAttribute('title') || '';
+          }
+          if (!text && node.tagName === 'A') {
+            text = node.getAttribute('title') || (node.href ? new URL(node.href).pathname : '');
+          }
+          if (!text) {
+            text = node.tagName.toLowerCase();
+            if (node.type) text += `[type=${node.type}]`;
+          }
 
-        results.push({
-          tag: node.tagName,
-          text: text.trim(),
-          x: Math.round(rect.x),
-          y: Math.round(rect.y),
-          width: Math.round(rect.width),
-          height: Math.round(rect.height),
-          href: node.href || null,
-          selector: getUniqueSelector(node),
-        });
+          results.push({
+            tag: node.tagName,
+            text: text.trim(),
+            x: Math.round(rect.x),
+            y: Math.round(rect.y),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+            href: node.href || null,
+          });
+        }
+      } catch (e) {
+        // Игнорируем ошибки невалидных селекторов
       }
     }
     return results;
-
-    // Простая функция получения уникального селектора (для отладки)
-    function getUniqueSelector(el) {
-      if (el.id) return `#${el.id}`;
-      const path = [];
-      while (el.nodeType === Node.ELEMENT_NODE) {
-        let selector = el.nodeName.toLowerCase();
-        if (el.className) selector += '.' + Array.from(el.classList).join('.');
-        path.unshift(selector);
-        el = el.parentNode;
-      }
-      return path.join(' > ');
-    }
   }, SIGNIFICANT_SELECTORS);
 
   console.log(`Найдено ${elements.length} значимых элементов`);
 
-  // --- Шаг 3: Аннотирование скриншота ---
-  // Готовим SVG с пронумерованными рамками
+  // --- Аннотирование ---
   let svgAnnotations = '';
   const descriptions = [];
 
   elements.slice(0, 15).forEach((el, idx) => {
     const num = idx + 1;
-    // Рисуем прямоугольник
+    // Прямоугольник
     svgAnnotations += `
       <rect x="${el.x}" y="${el.y}" width="${el.width}" height="${el.height}"
             fill="none" stroke="#E53935" stroke-width="2" rx="3" />
-      <!-- Номер в кружке -->
+      <!-- Кружок с номером -->
       <circle cx="${el.x - 5}" cy="${el.y - 5}" r="12" fill="#E53935" />
       <text x="${el.x - 5}" y="${el.y - 1}" fill="white" font-size="12" font-weight="bold"
             text-anchor="middle" alignment-baseline="middle">${num}</text>
     `;
-    // Готовим текстовое описание для документации
+
+    // Описание элемента
     let desc = `**${num}. ${el.text || el.tag}**`;
-    if (el.tag === 'INPUT') {
+    if (el.tag === 'INPUT' || el.tag === 'TEXTAREA') {
       desc += ' — поле ввода.';
-    } else if (el.tag === 'BUTTON' || el.getAttribute?.('role') === 'button') {
-      desc += ' — кнопка.';
-    } else if (el.tag === 'A') {
-      desc += ` — ссылка${el.href ? ' на ' + el.href : ''}.`;
+    } else if (el.tag === 'BUTTON' || el.tag === 'A' || el.tag === 'SELECT') {
+      desc += ' — элемент управления.';
     } else if (el.tag.match(/^H[1-6]$/)) {
-      desc += ' — заголовок раздела.';
+      desc += ' — заголовок.';
     } else {
       desc += ' — элемент интерфейса.';
     }
     descriptions.push(desc);
   });
 
-  // Накладываем SVG на скриншот
+  // Наложение аннотаций
   const annotatedPath = path.join(screenshotsDir, '01-main-annotated.png');
   if (svgAnnotations) {
     const svg = `<svg width="1280" height="800">${svgAnnotations}</svg>`;
@@ -140,13 +134,12 @@ const SIGNIFICANT_SELECTORS = [
       .toFile(annotatedPath);
     console.log('Аннотированный скриншот создан');
   } else {
-    // Если элементов нет, просто копируем исходный скриншот
     fs.copyFileSync(mainScreenshotPath, annotatedPath);
   }
 
-  // --- Шаг 4: Сборка Markdown-документации ---
-  const title = await page.title();
-  const docContent = `# Руководство пользователя — ${title}
+  // --- Генерация Markdown ---
+  const pageTitle = await page.title();
+  const docContent = `# Руководство пользователя — ${pageTitle}
 
 **Источник:** [${url}](${url})
 
