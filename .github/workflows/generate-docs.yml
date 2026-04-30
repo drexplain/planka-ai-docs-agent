@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       url:
-        description: 'https://plankanban.github.io/planka/'
+        description: 'Поле обязательно для заполнения'
         required: true
         default: ''
 
