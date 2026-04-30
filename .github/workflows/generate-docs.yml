@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       url:
-        description: 'URL проекта (напр. https://demo.planka.cloud)'
+        description: 'https://plankanban.github.io/planka/'
         required: true
-        default: 'https://demo.planka.cloud'
+        default: 'https://plankanban.github.io/planka/'
 
 jobs:
   generate:
