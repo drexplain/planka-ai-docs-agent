@@ -14,6 +14,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      # Кэш для ускорения повторных запусков
+      - name: Cache transformers models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: transformers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            transformers-${{ runner.os }}-
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -24,9 +33,11 @@ jobs:
 
       - name: Run documentation agent
         run: node scripts/capture-and-document.js "${{ github.event.inputs.url }}"
-        env:
-          # (Опционально) ваш API-ключ, если решите подключить внешнюю модель
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        # Секретная переменная ниже оставлена, если вы решите подключить внешний API.
+        # Если не нужна – удалите или закомментируйте строку с env.
+        #
+        # env:
+        #   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
       - name: Upload generated docs
         uses: actions/upload-artifact@v4
