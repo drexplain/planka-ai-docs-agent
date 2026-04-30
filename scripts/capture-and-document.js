@@ -9,10 +9,21 @@ const outputDir = path.join(__dirname, '..', 'output');
 const screenshotsDir = path.join(outputDir, 'screenshots');
 
 // Значимые элементы (CSS-селекторы БЕЗ псевдоклассов типа :visible)
+/*
 const SIGNIFICANT_SELECTORS = [
   'button',
   'a[href]:not([href="#"]):not([href="/"])',
   'input[type="text"], input[type="email"], input[type="password"], input[type="search"]',
+  'textarea',
+  'select',
+  'h1, h2',
+  '.btn, [role="button"]',
+];
+*/
+const SIGNIFICANT_SELECTORS = [
+  'button',
+  'a[href]:not([href="#"]):not([href="/"])',
+  'input:not([type="hidden"])',   // ← все инпуты, кроме скрытых
   'textarea',
   'select',
   'h1, h2',
