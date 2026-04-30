@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const sharp = require('sharp');
 
-const url = process.argv[2] || 'https://demo.planka.cloud';
+const url = process.argv[2];
 const outputDir = path.join(__dirname, '..', 'output');
 const screenshotsDir = path.join(outputDir, 'screenshots');
 
