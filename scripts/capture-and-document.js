@@ -3,14 +3,12 @@ const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
 const sharp = require('sharp');
-const { getCaption } = require('./vision-caption');
 
-const url = process.argv[2] || 'https://demo.planka.cloud';
+const url = process.argv[2] || 'https://plankanban.github.io/planka/';
 const outputDir = path.join(__dirname, '..', 'output');
 const screenshotsDir = path.join(outputDir, 'screenshots');
 
 (async () => {
-  // Создаём папки для результатов
   fs.mkdirSync(screenshotsDir, { recursive: true });
 
   const browser = await chromium.launch();
@@ -25,7 +23,22 @@ const screenshotsDir = path.join(outputDir, 'screenshots');
   await page.screenshot({ path: mainScreenshotPath, fullPage: true });
   console.log('Скриншот главной сохранён');
 
-  // --- Шаг 2: Аннотация (пример – обвести логотип) ---
+  // --- Шаг 2: Сбор текстовых данных для описания ---
+  const pageData = await page.evaluate(() => {
+    // Берём текст из <h1> или первого крупного заголовка
+    const h1 = document.querySelector('h1')?.innerText?.trim();
+    const title = document.title || h1 || 'Главная страница';
+
+    // Извлекаем названия ключевых кнопок/ссылок
+    const buttons = Array.from(document.querySelectorAll('button, a.btn, .nav-link, [role="button"]'))
+      .slice(0, 5)
+      .map(el => el.innerText.trim())
+      .filter(Boolean);
+
+    return { title, buttons };
+  });
+
+  // --- Шаг 3: Поиск элемента логотипа для аннотации ---
   const logoElement = await page.$('header img, .logo img, a.navbar-brand img');
   let annotationBoxes = [];
   if (logoElement) {
@@ -39,38 +52,43 @@ const screenshotsDir = path.join(outputDir, 'screenshots');
     });
   }
 
+  // Аннотированный скриншот (если есть что обводить)
+  let finalImagePath = mainScreenshotPath;
   if (annotationBoxes.length > 0) {
-    const svgOverlay = `<svg width="1280" height="800">
-      ${annotationBoxes.map(b => `
-        <rect x="${b.x}" y="${b.y}" width="${b.width}" height="${b.height}"
-              fill="none" stroke="red" stroke-width="2" rx="3"/>
-        <text x="${b.x}" y="${b.y - 5}" fill="red" font-size="14">${b.label}</text>
-      `).join('')}
-    </svg>`;
-    const annotatedPath = path.join(screenshotsDir, '01-main-annotated.png');
+    const svgOverlay = annotationBoxes.map(b =>
+      `<rect x="${b.x}" y="${b.y}" width="${b.width}" height="${b.height}"
+             fill="none" stroke="red" stroke-width="2" rx="3"/>
+       <text x="${b.x}" y="${b.y - 5}" fill="red" font-size="14">${b.label}</text>`
+    ).join('');
+    const svg = `<svg width="1280" height="800">${svgOverlay}</svg>`;
+    finalImagePath = path.join(screenshotsDir, '01-main-annotated.png');
     await sharp(mainScreenshotPath)
-      .composite([{ input: Buffer.from(svgOverlay), top: 0, left: 0 }])
-      .toFile(annotatedPath);
+      .composite([{ input: Buffer.from(svg), top: 0, left: 0 }])
+      .toFile(finalImagePath);
     console.log('Аннотированный скриншот готов');
   }
 
-  // --- Шаг 3: Подпись от локальной модели ---
-  const caption = await getCaption(mainScreenshotPath);
-  console.log('Описание от модели:', caption);
+  // --- Шаг 4: Формирование осмысленного описания из извлечённых текстов ---
+  let caption = pageData.title;
+  if (pageData.buttons.length > 0) {
+    caption += '\n\nОсновные элементы: ' + pageData.buttons.join(', ');
+  } else {
+    caption += '\n\nСтраница загружена автоматически.';
+  }
 
-  // --- Шаг 4: Сборка Markdown ---
+  // --- Шаг 5: Сборка Markdown ---
   const docContent = `# Руководство пользователя (автоматическая генерация)
 
-  **Источник:** ${url}
+**Источник:** ${url}
 
-  ## Главная страница
+## Главная страница
 
-  ![Главная страница](screenshots/01-main-annotated.png)
+![Главная страница](screenshots/01-main-annotated.png)
 
-  ${caption || '*Описание отсутствует*'}
+${caption}
 
-  > Документация сгенерирована автоматически. При необходимости отредактируйте вручную.
-  `;
+> Документация сгенерирована автоматически. При необходимости отредактируйте вручную.
+`;
 
   fs.writeFileSync(path.join(outputDir, 'README.md'), docContent);
   console.log('Документация сохранена в output/README.md');
