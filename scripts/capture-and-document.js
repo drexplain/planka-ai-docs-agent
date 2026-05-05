@@ -17,6 +17,7 @@ const screenshotsDir = path.join(outputDir, 'screenshots');
 // Значимые элементы (CSS‑селекторы, без :visible)
 const SIGNIFICANT_SELECTORS = [
   'button',
+  'form',
   'a[href]:not([href="#"]):not([href="/"])',
   'input:not([type="hidden"])',   // все инпуты, кроме скрытых (включает чекбоксы, radio, text, tel и т.д.)
   'textarea',
