@@ -1,4 +1,4 @@
-name: Planka AI Docs Agent
+name: AI Docs Agent
 
 on:
   workflow_dispatch:
